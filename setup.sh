@@ -68,8 +68,8 @@ main() {
 	[ "${exit_now}" -ge 1 ] && exit "${exit_now}"
 
 	# Set up CAKE-autorate files
-	# cd to the /root directory
-	cd /root/ || exit 1
+	# cd to the /usr/lib directory
+	cd /usr/lib/ || exit 1
 
 	# create the cake-autorate directory if it's not present
 	if ! [ -d cake-autorate ]
@@ -88,7 +88,7 @@ main() {
 		exit 1
 	fi
 
-	printf "Installing cake-autorate in /root/cake-autorate...\n"
+	printf "Installing cake-autorate in /usr/lib/cake-autorate...\n"
 
 	# Download the files to a temporary directory, so we can move them to the cake-autorate directory
 	tmp=$(mktemp -d)
@@ -137,7 +137,7 @@ main() {
 	done
 
 	# Get version and generate a file containing version information
-	version=$(grep -m 1 ^cake_autorate_version= /root/cake-autorate/cake-autorate.sh | cut -d= -f2 | cut -d'"' -f2)
+	version=$(grep -m 1 ^cake_autorate_version= /usr/lib/cake-autorate/cake-autorate.sh | cut -d= -f2 | cut -d'"' -f2)
 	cat > version.txt <<-EOF
 		version=${version}
 		commit=${commit}
@@ -153,7 +153,7 @@ main() {
 
 	printf '\n%s\n\n' "${version} successfully installed, but not yet running"
 	printf '%s\n' "Start the software manually with:"
-	printf '%s\n' "   cd /root/cake-autorate; ./cake-autorate.sh"
+	printf '%s\n' "   cd /usr/lib/cake-autorate; ./cake-autorate.sh"
 	printf '%s\n' "Run as a service with:"
 	printf '%s\n\n' "   service cake-autorate enable; service cake-autorate start"
 }

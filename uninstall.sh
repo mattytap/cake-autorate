@@ -45,8 +45,8 @@ main() {
 	fi
 
 	# Set up CAKE-autorate files
-	# cd to the /root directory
-	cd /root/ || exit 1
+	# cd to the /usr/lib directory
+	cd /usr/lib/ || exit 1
 
 	# cd into it
 	cd cake-autorate/ || exit 1
@@ -82,9 +82,9 @@ main() {
 		rm -f "${file}"
 	done
 
-	# remove /root/cake-autorate if empty
+	# remove /usr/lib/cake-autorate if empty
 	cd ..
-	rmdir cake-autorate 2>/dev/null && printf >&2 "Removed empty /root/cake-autorate directory"
+	rmdir cake-autorate 2>/dev/null && printf >&2 "Removed empty /usr/lib/cake-autorate directory"
 
 	printf '%s\n' "cake-autorate was uninstalled"
 }

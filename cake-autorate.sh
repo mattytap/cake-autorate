@@ -61,7 +61,7 @@ set -o pipefail
 export LC_ALL=C
 
 # Set PREFIX
-PREFIX=/root/cake-autorate
+PREFIX=/usr/lib/cake-autorate
 
 # shellcheck source=lib.sh
 . "${PREFIX}/lib.sh"

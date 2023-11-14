@@ -1053,7 +1053,7 @@ function [ cur_record_type ] = fn_get_record_type_4_line( current_line, delimite
 			else
 				log_struct.metainformation.INFO.count = log_struct.metainformation.INFO.count + 1;
 			endif
-		case {"/root"}
+		case {"/usr/lib"}
 			% example for single shot logging...
 			cur_record_type = "SKIP_root";
 			if ~isfield(log_struct.metainformation, 'SKIP_root')

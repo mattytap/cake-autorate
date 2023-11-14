@@ -38,7 +38,7 @@ required tools. To use it:
 
 - For a fresh install, you will need to undertake the following steps.
 
-- Edit the _config.primary.sh_ script (in the _/root/cake-autorate_
+- Edit the _config.primary.sh_ script (in the _/usr/lib/cake-autorate_
   directory) using vi or nano to set the configuration parameters
   below (see comments in _config.primary.sh_ for details).
 
@@ -110,7 +110,7 @@ To start the `cake-autorate.sh` script and watch the logged output as
 it adjusts the CAKE parameters, run these commands:
 
 ```bash
-cd /root/cake-autorate     # to the cake-autorate directory
+cd /usr/lib/cake-autorate     # to the cake-autorate directory
 ./cake-autorate.sh
 ```
 
@@ -155,7 +155,7 @@ preserved, enter the files below to the OpenWrt router's
 [Configuration tab](https://openwrt.org/docs/guide-user/troubleshooting/backup_restore#back_up)
 
 ```bash
-/root/cake-autorate
+/usr/lib/cake-autorate
 /etc/init.d/cake-autorate
 ```
 
@@ -164,7 +164,7 @@ preserved, enter the files below to the OpenWrt router's
 - cake-autorate has been designed to run multiple instances
   simultaneously.
 - cake-autorate will run one instance per config file present in the
-  _/root/cake-autorate/_ directory in the form:
+  _/usr/lib/cake-autorate/_ directory in the form:
 
 ```bash
 config.interface.sh
