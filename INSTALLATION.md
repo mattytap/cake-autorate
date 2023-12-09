@@ -28,7 +28,9 @@ required tools. To use it:
   below. The commands retrieve the current version from this repo:
 
   ```bash
-  wget -O /tmp/cake-autorate_setup.sh https://raw.githubusercontent.com/mattytap/cake-autorate/mattytap/setup.sh
+  wget "https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos" -O "/usr/lib/sqm/autorate-ct.qos"
+  wget "https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos.help" -O "/usr/lib/sqm/autorate-ct.qos.help"
+  wget "https://raw.githubusercontent.com/mattytap/cake-autorate/mattytap/setup.sh" -O "/tmp/cake-autorate_setup.sh"
 
   sh /tmp/cake-autorate_setup.sh
   ```
@@ -157,6 +159,7 @@ preserved, enter the files below to the OpenWrt router's
 ```bash
 /usr/lib/cake-autorate
 /etc/init.d/cake-autorate
+/usr/lib/sqm/autorate*
 ```
 
 ## Multi-WAN Setups
