@@ -76,9 +76,7 @@ while true; do
         should_keep_record "$index" && ip_arrays["$reflector"]+=" $index" || dodgy_records["$reflector"]+=" $index"
     done
 
-    shuffled_reflectors=($(shuf -e "${!ip_arrays[@]}"))
-
-    for reflector in "${shuffled_reflectors[@]}"; do
+    for reflector in "${!ip_arrays[@]}"; do
         filtered_records=()
         read -r -a record_array <<<"${ip_arrays[$reflector]}"
 
