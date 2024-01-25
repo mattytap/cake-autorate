@@ -2,11 +2,7 @@
 
 logfile="/var/log/cake-autorate.primary.log"
 records_per_batch=55
-num_splits=7
 num_fields=31
-timestamp_index=3
-reflector_index=10
-skip_records=3
 
 declare -a records
 declare -a trimmed_records
@@ -27,14 +23,6 @@ calculate_median() {
     else
         echo $(((sorted_values[mid - 1] + sorted_values[mid]) / 2))
     fi
-}
-
-shuffle7() {
-    local i tmp rand
-    for ((i = 6; i > 0; i--)); do
-        rand=$((RANDOM % (i + 1)))
-        tmp=${array[i]} array[i]=${array[rand]} array[rand]=$tmp
-    done
 }
 
 debug_output_array() {
@@ -58,36 +46,46 @@ while true; do
     ip_arrays=()
     dodgy_records=()
     epoch=$(echo "${logfile_records[0]}" | awk -F'; ' '{print int($3)}')
-    echo "epoch=$epoch"
+    #echo "epoch=$epoch"
 
     # Populate records and trimmed_records arrays
     for i in "${!logfile_records[@]}"; do
-        record="${logfile_records[i]}"
-        timestamp=$(echo "$record" | awk -F'; ' '{print $3}')
-        records[i]="${record}; "
+        records[i]="${logfile_records[i]}; "
         if ((i >= 3 && i < $((${#logfile_records[@]} - 3)))); then
-            trimmed_records[i]="${record}; "
+            trimmed_records[i]="${logfile_records[i]}; "
         fi
     done
+    #debug_output_array "records"
+    #debug_output_array "trimmed_records"
 
-    debug_output_array "records"
-    debug_output_array "trimmed_records"
+    end_time=${EPOCHREALTIME/./}
+    execution_time=$(echo "($end_time - $start_time) / 1000" | bc)
+    #echo "1 Execution time: $execution_time ms"
+    start_time=${EPOCHREALTIME/./}
+
     # Preprocess the data
     preprocessed_data=()
-    for index in "${!records[@]}"; do
-        field13=$(echo "${records[$index]}" | awk -F'; ' '{print $13}')
-        timestamp=$(echo "${records[$index]}" | awk -F'; ' '{print $3}')
-        reflector=$(echo "${records[$index]}" | awk -F'; ' '{print $10}')
-        preprocessed_data[index]="$field13;$timestamp;$reflector"
-    done
 
-    debug_output_array "preprocessed_data"
+    # Concatenate the records array into a single string separated by newlines
+    records_string=$(printf "%s\n" "${records[@]}")
+
+    # Use awk to process the entire dataset at once
+    IFS=$'\n' read -rd '' -a preprocessed_data < <(echo "$records_string" | awk -F'; ' '{print $13 ";" $18 ";" $3 ";" $10}')
+
+    # Optional: Uncomment to debug
+    #debug_output_array "preprocessed_data"
+
+    end_time=${EPOCHREALTIME/./}
+    execution_time=$(echo "($end_time - $start_time) / 1000" | bc)
+    #echo "2b Execution time: $execution_time ms"
+    start_time=${EPOCHREALTIME/./}
+
     # Batch processing
     for index in "${!trimmed_records[@]}"; do
-        IFS=';' read -r field13 timestamp reflector <<<"${preprocessed_data[index]}"
+        IFS=';' read -r field13 field18 timestamp reflector <<<"${preprocessed_data[index]}"
         start_index=$((index - 3))
         end_index=$((index + 1 + 3))
-        surrounding_values=()
+        surrounding_values13=()
 
         for ((i = start_index; i < end_index; i++)); do
             if [ "$i" -eq "$index" ]; then
@@ -95,21 +93,32 @@ while true; do
             fi
 
             IFS=';' read -r value _ <<<"${preprocessed_data[i]}"
-            surrounding_values+=("$value")
+            surrounding_values13+=("$value")
         done
-        debug_output_array "surrounding_values"
+        #debug_output_array "surrounding_values13"
 
-        median=$(calculate_median "${surrounding_values[@]}")
+        median13=$(calculate_median "${surrounding_values13[@]}")
 
-        if ((field13 > 3 * median)); then
+        if ((field13 > 3 * median13)); then
             dodgy_records["$reflector"]+=" $index"
         else
             ip_arrays["$reflector"]+=" $index"
         fi
     done
 
-    debug_output_array "ip_arrays"
-    debug_output_array "dodgy_records"
+    #debug_output_array "ip_arrays"
+    #debug_output_array "dodgy_records"
+
+    end_time=${EPOCHREALTIME/./}
+    execution_time=$(echo "($end_time - $start_time) / 1000" | bc)
+    #echo "3 Execution time: $execution_time ms"
+    start_time=${EPOCHREALTIME/./}
+
+    # Generate a random number between 0 and 6 (inclusive)
+    selected_iteration=$((RANDOM % 7))
+
+    # Initialize a counter
+    counter=0
 
     # Iterate over the ip array
     for reflector in "${!ip_arrays[@]}"; do
@@ -119,13 +128,13 @@ while true; do
         for index in "${record_array[@]}"; do
             filtered_records["$index"]="${records[$index]}"
         done
-debug_output_array "filtered_records"
+        #debug_output_array "filtered_records"
 
         sum_array=()
         count_array=()
 
         # Initialize sum and count arrays for the fields of interest
-        for field in 5 6 12 13 15 16 17 18 20 21 28 29 30 31; do
+        for field in 11 5 6 12 13 15 16 17 18 20 21 28 29 30 31; do
             sum_array[field]=0
             count_array[field]=0
         done
@@ -136,11 +145,12 @@ debug_output_array "filtered_records"
             fields=($(echo "$record" | awk -F'; ' '{
             $28=(substr($28,length($28)-2)=="_bb")?10:0  # Adjusted index for $28
             $29=(substr($29,length($29)-2)=="_bb")?10:0  # Adjusted index for $29
-            print $5,$6,$12,$13,$15,$16,$17,$18,$20,$21,$28,$29,$30,$31
+            print $11, $5,$6,$12,$13,$15,$16,$17,$18,$20,$21,$28,$29,$30,$31
             }'))
+            #debug_output_array "fields"
 
             index=0
-            for field in 5 6 12 13 15 16 17 18 20 21 28 29 30 31; do
+            for field in 11 5 6 12 13 15 16 17 18 20 21 28 29 30 31; do
                 if [[ "${fields[index]}" =~ ^[0-9]+$ ]]; then
                     ((sum_array[field] += "${fields[index]}"))
                     ((count_array[field]++))
@@ -149,31 +159,37 @@ debug_output_array "filtered_records"
             done
         done
 
-        processed_line=""
-        for field in 5 6 12 13 15 16 17 18 20 21 28 29 30 31; do
+        line=""
+        for field in 11 5 6 12 13 15 16 17 18 20 21 28 29 30 31; do
             if [ "${count_array[field]}" -gt 0 ]; then
                 average=$((100 * sum_array[field] / count_array[field]))
-                processed_line+="$((average / 100)); "
+                line+="$((average / 100)):"
             else
-                processed_line+="0; " # Default value if no data available
+                line+="0:" # Default value if no data available
             fi
         done
 
-        # Post-processing
-        line=$(echo "$processed_line" | awk -v OFS=':' -F'; ' '{
-        print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
-    }')
+        # Remove the trailing colon
+        line=${line%:}
+        #echo $line
+
         # Output the final line
         echo "PUTVAL \"$HOSTNAME/autorate-$reflector/autorate\" interval=$INTERVAL N:$line"
-        echo "PUTVAL \"$HOSTNAME/autorate-all/autorate\" interval=$INTERVAL N:$line"
+        if [ "$counter" -eq "$selected_iteration" ]; then
+            echo "PUTVAL \"$HOSTNAME/autorate-all/autorate\" interval=$INTERVAL N:$line"
+        fi
+
+        # Increment the counter
+        ((counter++))
     done
 
     end_time=${EPOCHREALTIME/./}
     execution_time=$(echo "($end_time - $start_time) / 1000" | bc)
-    echo "4 Execution time: $execution_time ms"
+    #echo "4 Execution time: $execution_time ms"
+
     #sleep 1
 done
-start_time=${EPOCHREALTIME/./}
 end_time=${EPOCHREALTIME/./}
 execution_time=$(echo "($end_time - $start_time) / 1000" | bc)
 echo "4 Execution time: $execution_time ms"
+start_time=${EPOCHREALTIME/./}
