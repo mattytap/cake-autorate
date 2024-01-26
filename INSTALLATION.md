@@ -28,9 +28,9 @@ required tools. To use it:
   below. The commands retrieve the current version from this repo:
 
   ```bash
-  wget "https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos" -O "/usr/lib/sqm/autorate-ct.qos"
-  wget "https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos.help" -O "/usr/lib/sqm/autorate-ct.qos.help"
-  wget "https://raw.githubusercontent.com/mattytap/cake-autorate/mattytap/setup.sh" -O "/tmp/cake-autorate_setup.sh"
+  wget -O /tmp/cake-autorate_setup.sh https://raw.githubusercontent.com/mattytap/cake-autorate/mattytap/setup.sh
+  wget -O /usr/lib/sqm/autorate-ct.qos https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos
+  wget -O /usr/lib/sqm/autorate-ct.qos.help https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos.help
 
   sh /tmp/cake-autorate_setup.sh
   ```
