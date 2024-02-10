@@ -28,9 +28,9 @@ required tools. To use it:
   below. The commands retrieve the current version from this repo:
 
   ```bash
-  wget -O "/tmp/cake-autorate_setup.sh" "https://raw.githubusercontent.com/mattytap/cake-autorate/mattytap/setup.sh"
-  wget -O "/usr/lib/sqm/autorate-ct.qos" "https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos"
-  wget -O "/usr/lib/sqm/autorate-ct.qos.help" "https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos.help"
+  wget -O /tmp/cake-autorate_setup.sh https://raw.githubusercontent.com/mattytap/cake-autorate/mattytap/setup.sh
+  wget -O /usr/lib/sqm/autorate-ct.qos https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos
+  wget -O /usr/lib/sqm/autorate-ct.qos.help https://raw.githubusercontent.com/mattytap/dscpclassify/mattytap/usr/lib/sqm/autorate-ct.qos.help
 
   sh /tmp/cake-autorate_setup.sh
   ```
@@ -49,62 +49,133 @@ required tools. To use it:
     obtained, for example, by consulting the configured SQM settings
     in LuCI or by examining the output of `tc qdisc ls`.
 
-    | Variable | Setting | | -------: |
-    :----------------------------------------------- | | `dl_if` |
-    Interface that downloads data (often _ifb4-wan_) | | `ul_if` |
-    Interface that uploads (often _wan_) |
-
-  - Set bandwidth variables as described in _config.primary.sh_.
-
-    | Type | Download | Upload | | ---: | :------------------------- |
-    :------------------------- | | Min. | `min_dl_shaper_rate_kbps` |
-    `min_ul_shaper_rate_kbps` | | Base | `base_dl_shaper_rate_kbps` |
-    `base_ul_shaper_rate_kbps` | | Max. | `max_dl_shaper_rate_kbps` |
-    `max_ul_shaper_rate_kbps` |
+    | Variable | Setting                                          |
+    | -------: | :----------------------------------------------- |
+    |  `dl_if` | Interface that downloads data (often _ifb4-wan_) |
+    |  `ul_if` | Interface that uploads (often _wan_)             |
 
   - Choose whether cake-autorate should adjust the shaper rates
     (disable for monitoring only):
 
-    | Variable | Setting | | ----------------------: |
-    :----------------------------------------- | |
-    `adjust_dl_shaper_rate` | enable (1) or disable (0) download
-    shaping | | `adjust_ul_shaper_rate` | enable (1) or disable (0)
-    upload shaping |
+    |                Variable | Setting                                    |
+    | ----------------------: | :----------------------------------------- |
+    | `adjust_dl_shaper_rate` | enable (1) or disable (0) download shaping |
+    | `adjust_ul_shaper_rate` | enable (1) or disable (0) upload shaping   |
 
-- The other configuration file - _defaults.sh_ - has sensible default
-  settings. After cake-autorate has been installed and is running, you
-  may wish to change some of these.
+  - Set bandwidth variables as described in _config.primary.sh_.
 
-  - For example, to set a different `dl_delay_thr_ms`, then add a line
-    to the config like:
+    | Type | Download                   | Upload                     |
+    | ---: | :------------------------- | :------------------------- |
+    | Min. | `min_dl_shaper_rate_kbps`  | `min_ul_shaper_rate_kbps`  |
+    | Base | `base_dl_shaper_rate_kbps` | `base_ul_shaper_rate_kbps` |
+    | Max. | `max_dl_shaper_rate_kbps`  | `max_ul_shaper_rate_kbps`  |
+
+  - Set connection idle variable as described in _config.primary.sh_.
+
+    |                     Variable | Setting                                                  |
+    | ---------------------------: | :------------------------------------------------------- |
+    | `connection_active_thr_kbps` | threshold in Kbit/s below which dl/ul is considered idle |
+
+## Configuration of cake-autorate
+
+  cake-autorate is highly configurable and almost every aspect of it
+  can be (and is ideally) fine-tuned. 
+
+- The file _defaults.sh_ has sensible default
+  settings. After cake-autorate has been installed, you may wish to
+  override some of these by providing corresponding entries inside
+  _config.primary.sh_.
+
+  - For example, to set a different `dl_owd_delta_thr_ms`, then add a line
+    to the config file _config.primary.sh_ like:
 
     ```bash
-    dl_delay_thr_ms=100
+    dl_owd_delta_thr_ms=100
     ```
+- Users are encouraged to look at  _defaults.sh_, which documents
+  the many configurable parameters of cake-autorate.
+   
+    ## Delay thresholds
+
+  - At least the following variables relating to the delay thresholds
+    may warrant overriding depending on the connection particulars. 
+
+    |                Variable | Setting                                      |
+    | ------------------------: | :----------------------------------------- |
+    |     `dl_owd_delta_thr_ms` | extent of download OWD increase to classify as a delay                                                       |
+    |     `ul_owd_delta_thr_ms` | extent of upload OWD increase to classify as a delay                                                         |
+    | `dl_avg_owd_delta_thr_ms` | average download OWD threshold across reflectors at which maximum downward shaper rate adjustment is applied |
+    | `ul_avg_owd_delta_thr_ms` | average upload OWD threshold across reflectors at which maximum downward shaper rate adjustment is applied   |
+
+    An OWD measurement to an individual reflector that exceeds
+    `xl_owd_delta_thr_ms` from its baseline is classified as a delay.
+    Bufferbloat is detected when there are `bufferbloat_detection_thr`
+    delays out of the last`bufferbloat_detection_window` reflector
+    responses. Upon bufferbloat detection, the extent of the average
+    OWD delta taken across the reflectors governs how much the
+    shaper rate is adjusted down (scaled by average delta OWD /
+    `xl_avg_owd_delta_thr_ms`).
+ 
+    Avoiding bufferbloat requires throttling the connection,
+    and thus there is a trade-off between bandwidth and latency. 
+
+    The delay thresholds affect how much the shaper rate is
+    punished responsive to latency increase. Users that want
+    very low latency at all times (at the expense of bandwidth)
+    will want lower values. Users that can tolerate higher
+    latency excursions (facilitating greater bandwidth).
+
+    Although the default parameters have been designed
+    to offer something that might work out of the box
+    for certain connections, some analysis is likely required
+    to optimize cake-autorate for the specific use-case.
+
+    Read about this in the [ANALYSIS](./ANALYSIS.md) page.
+
+    ## Reflectors
+
+  - Additionally, the following variables relating to reflectors
+    may also warrant overriding:
+
+    |                Variable | Setting                                      |
+    | ------------------------: | :----------------------------------------- |
+    |              `reflectors` | list of reflectors                      |
+    |              `no_pingers` | number of reflectors to ping            |
+    | `reflector_ping_interval` | interval between pinging each reflector |
+ 
+    Reflector choice is a crucial parameter for cake-autorate.
+
+    By default, cake-autorate sends ICMPs to various large anycast
+    DNS hosts (Cloudflare, Google, Quad9, etc.).
+
+    It is the responsibility of the user to ensure that the
+    configured reflectors provide stable, low-latency responses.
+ 
+    Some governments appear to block DNS hosts like Google.
+    Users affected by the same will need to determine
+    appropriate alternative reflectors. 
+ 
+    cake-autorate monitors the responses from reflectors
+    and automatically kicks out bad reflectors. The
+    parameters governing the same are configurable
+    in the config file (see _defaults.sh_).
+    
+    ## Logging
 
   - The following variables control logging:
 
-    | Variable | Setting | | -----------------------------: |
-    :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    | | `output_processing_stats` | If non-zero, log the results of
-    every iteration through the process | | `output_load_stats` | If
-    non-zero, log the log the measured achieved rates of upload and
-    download | | `output_reflector_stats` | If non-zero, log the
-    statistics generated in respect of reflector health monitoring | |
-    `output_summary_stats` | If non-zero, log a summary with the key
-    statistics | | `output_cake_changes` | If non-zero, log when
-    changes are made to CAKE settings via `tc` - this shows when
-    cake-autorate is adjusting the shaper | | `debug` | If non-zero,
-    debug lines will be output | | `log_DEBUG_messages_to_syslog` | If
-    non-zero, log lines will also get sent to the system log | |
-    `log_to_file` | If non-zero, log lines will be sent to
-    /tmp/cake-autorate.log regardless of whether printing to console
-    and after every write the log file will be rotated f either
-    `log_file_max_time_mins` have elapsed or `log_file_max_size_KB`
-    has been exceeded | | `log_file_max_time_mins` | Number of minutes
-    to elapse between log file rotaton | | `log_file_max_size_KB` |
-    Number of KB (i.e. bytes/1024) worth of log lines between log file
-    rotations |
+    |                       Variable | Setting                                                                                                                                                                                   |
+    | -----------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    |      `output_processing_stats` | If non-zero, log the results of every iteration through the process                                                                                                                       |
+    |            `output_load_stats` | If non-zero, log the log the measured achieved rates of upload and download                                                                                                               |
+    |       `output_reflector_stats` | If non-zero, log the statistics generated in respect of reflector health monitoring                                                                                                       |
+    |         `output_summary_stats` | If non-zero, log a summary with the key statistics                                                                                                                                        |
+    |          `output_cake_changes` | If non-zero, log when changes are made to CAKE settings via `tc` - this shows when cake-autorate is adjusting the shaper                                                                  |
+    |                        `debug` | If non-zero, debug lines will be output                                                                                                                                                   |
+    | `log_DEBUG_messages_to_syslog` | If non-zero, log lines will also get sent to the system log                                                                                                                               |
+    |                  `log_to_file` | If non-zero, log lines will be sent to /tmp/cake-autorate.log regardless of whether printing to console `log_file_max_time_mins` have elapsed or `log_file_max_size_KB` has been exceeded |
+    |       `log_file_max_time_mins` | Number of minutes to elapse between log file rotaton                                                                                                                                      |
+    |         `log_file_max_size_KB` | Number of KB (i.e. bytes/1024) worth of log lines between log file rotations                                                                                                              |
 
 ## Manual testing
 
@@ -143,8 +214,10 @@ _/var/log/cake-autorate.primary.log_ (observing the instance
 identifier _cake-autorate_config.identifier.sh_ set in the config file
 name).
 
-WARNING: Take care to ensure sufficient free (Flash) memory exists in
-router to handle selected logging parameters.
+WARNING: Take care to ensure sufficient free memory exists on
+router to handle selected logging parameters. Consider disabling
+logging or adjusting logging parameters such as 
+`log_file_max_time_mins` or `log_file_max_size_KB` if necessary.
 
 ## Preserving cake-autorate files for backup or upgrades
 
@@ -170,10 +243,10 @@ preserved, enter the files below to the OpenWrt router's
   _/usr/lib/cake-autorate/_ directory in the form:
 
 ```bash
-config.interface.sh
+config.instance.sh
 ```
 
-where 'interface' is replaced with e.g. 'primary', 'secondary', etc.
+where 'instance' is replaced with e.g. 'primary', 'secondary', etc.
 
 ## Example Starlink Configuration
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # cake-autorate automatically adjusts CAKE bandwidth(s)
 # in dependence on: a) receive and transmit transfer rates; and b) latency
@@ -212,7 +212,7 @@ reset_log_file()
 generate_log_file_scripts()
 {
 	cat > "${run_path}/log_file_export" <<- EOT
-	#!/bin/bash
+	#!/usr/bin/env bash
 
 	timeout_s=\${1:-20}
 
@@ -246,7 +246,7 @@ generate_log_file_scripts()
 	EOT
 
 	cat > "${run_path}/log_file_reset" <<- EOT
-	#!/bin/bash
+	#!/usr/bin/env bash
 
 	if kill -USR2 "${proc_pids['maintain_log_file']}"
 	then
@@ -783,9 +783,8 @@ parse_fping()
 
 			REFLECTOR_RESPONSE)
 
-				read -r timestamp reflector _ seq_rtt <<< "${command[@]:1}"
-				checksum="${command[*]: -1}"
-				;;
+				read -r timestamp reflector _ seq _ _ rtt_ms _ _ _ _ _ checksum <<< "${command[@]:1}"
+								;;
 
 			START_PINGER)
 
@@ -848,15 +847,12 @@ parse_fping()
 				;;
 		esac
 
-		[[ "${timestamp:-}" && "${reflector:-}" && "${seq_rtt:-}" && "${checksum:-}" ]] || continue
+		[[ "${timestamp:-}" && "${reflector:-}" && "${seq:-}" && "${rtt_ms:-}" && "${checksum:-}" ]] || continue
 		[[ "${checksum}" == "${timestamp}" ]] || continue
 
-		[[ "${seq_rtt}" =~ \[([0-9]+)\].*[[:space:]]([0-9]+)\.?([0-9]+)?[[:space:]]ms ]] || continue
-
-		seq="${BASH_REMATCH[1]}"
-
-		rtt_us="${BASH_REMATCH[3]}000"
-		rtt_us=$((${BASH_REMATCH[2]}000+10#${rtt_us:0:3}))
+		seq="${seq//[\[\]]}"
+        printf -v rtt_us %.3f "${rtt_ms}"
+		rtt_us="${rtt_us//.}"
 
 		dl_owd_us=$((rtt_us/2))
 		ul_owd_us="${dl_owd_us}"
@@ -928,9 +924,8 @@ parse_ping()
 
 			REFLECTOR_RESPONSE)
 
-				read -r timestamp _ _ _ reflector seq_rtt <<< "${command[@]:1}"
-				checksum="${command[*]: -1}"
-				;;
+				read -r timestamp _ _ _ reflector seq _ rtt_ms _ checksum <<< "${command[@]:1}"
+								;;
 
 			START_PINGER)
 
@@ -995,18 +990,16 @@ parse_ping()
 
 		esac
 
-		[[ "${timestamp:-}" && "${reflector:-}" && "${seq_rtt:-}" && "${checksum:-}" ]] || continue
+		[[ "${timestamp:-}" && "${reflector:-}" && "${seq:-}" && "${rtt_ms:-}" && "${checksum:-}" ]] || continue
 		[[ "${checksum}" == "${timestamp}" ]] || continue
-
-		# If no match then skip onto the next one
-		[[ "${seq_rtt}" =~ icmp_[s|r]eq=([0-9]+).*time=([0-9]+)\.?([0-9]+)?[[:space:]]ms ]] || continue
 
 		reflector=${reflector//:/}
 
-		seq=${BASH_REMATCH[1]}
+		seq="${seq//icmp_seq=}"
+		rtt_ms="${rtt_ms//time=}"
 
-		rtt_us=${BASH_REMATCH[3]}000
-		rtt_us=$((${BASH_REMATCH[2]}000+10#${rtt_us:0:3}))
+		printf -v rtt_us %.3f "$rtt_ms"
+		rtt_us="${rtt_us//.}"
 
 		dl_owd_us=$((rtt_us/2))
 		ul_owd_us="${dl_owd_us}"
@@ -1823,7 +1816,7 @@ then
 		broken_log_file_path_override=${log_file_path_override}
 		log_file_path=/var/log/cake-autorate${instance_id:+.${instance_id}}.log
 		log_msg "ERROR" "Log file path override: '${broken_log_file_path_override}' does not exist. Exiting now."
-		exit
+		exit 1
 	fi
 	log_file_path=${log_file_path_override}/cake-autorate${instance_id:+.${instance_id}}.log
 else
@@ -1848,7 +1841,7 @@ then
 	then
 		log_msg "ERROR" "${run_path} already exists and an instance appears to be running with main process pid ${running_main_pid}. Exiting script."
 		trap - INT TERM EXIT
-		exit
+		exit 1
 	else
 		log_msg "DEBUG" "${run_path} already exists but no instance is running. Removing and recreating."
 		rm -r "${run_path}"
@@ -1863,16 +1856,20 @@ proc_pids['main']="${BASHPID}"
 no_reflectors=${#reflectors[@]}
 
 # Check ping binary exists
-command -v "${pinger_binary}" &> /dev/null || { log_msg "ERROR" "ping binary ${pinger_binary} does not exist. Exiting script."; exit; }
+command -v "${pinger_binary}" &> /dev/null || { log_msg "ERROR" "ping binary ${pinger_binary} does not exist. Exiting script."; exit 1; }
 
 # Check no_pingers <= no_reflectors
-(( no_pingers > no_reflectors )) && { log_msg "ERROR" "number of pingers cannot be greater than number of reflectors. Exiting script."; exit; }
+(( no_pingers > no_reflectors )) && { log_msg "ERROR" "number of pingers cannot be greater than number of reflectors. Exiting script."; exit 1; }
 
 # Check dl/if interface not the same
-[[ "${dl_if}" == "${ul_if}" ]] && { log_msg "ERROR" "download interface and upload interface are both set to: '${dl_if}', but cannot be the same. Exiting script."; exit; }
+[[ "${dl_if}" == "${ul_if}" ]] && { log_msg "ERROR" "download interface and upload interface are both set to: '${dl_if}', but cannot be the same. Exiting script."; exit 1; }
 
 # Check bufferbloat detection threshold not greater than window length
-(( bufferbloat_detection_thr > bufferbloat_detection_window )) && { log_msg "ERROR" "bufferbloat_detection_thr cannot be greater than bufferbloat_detection_window. Exiting script."; exit; }
+(( bufferbloat_detection_thr > bufferbloat_detection_window )) && { log_msg "ERROR" "bufferbloat_detection_thr cannot be greater than bufferbloat_detection_window. Exiting script."; exit 1; }
+
+# Check if connection_active_thr_kbps is greater than min dl/ul shaper rate
+(( connection_active_thr_kbps > min_dl_shaper_rate_kbps )) && { log_msg "ERROR" "connection_active_thr_kbps cannot be greater than min_dl_shaper_rate_kbps. Exiting script."; exit 1; }
+(( connection_active_thr_kbps > min_ul_shaper_rate_kbps )) && { log_msg "ERROR" "connection_active_thr_kbps cannot be greater than min_ul_shaper_rate_kbps. Exiting script."; exit 1; }
 
 # Passed error checks
 
@@ -2100,7 +2097,7 @@ case "${pinger_binary}" in
 
 	*)
 		log_msg "ERROR" "Unknown pinger binary: ${pinger_binary}"
-		exit
+		exit 1
 		;;
 esac
 

@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# *** INSTANCE-SPECIFIC CONFIGURATION OPTIONS ***
+# 
+# cake-autorate will run one instance per config file present in the /root/cake-autorate
+# directory in the form: config.instance.sh. Thus multiple instances of cake-autorate
+# can be established by setting up appropriate config files like config.primary.sh and 
+# config.secondary.sh for the respective first and second instances of cake-autorate.
 
 # *** OUTPUT AND LOGGING OPTIONS ***
 
@@ -20,9 +27,9 @@ log_DEBUG_messages_to_syslog=0	# enable (1) or disable (0) logging of all DEBUG 
 ### sent by this instance of cake-autorate actually travel through these interfaces.
 ### See ping_extra_args and ping_prefix_string
 
-dl_if=ifb-ingress   # download interface
-ul_if=eth0             # upload interface
-#ul_if=eth5             # upload interface
+dl_if=ifb-ingress # download interface
+ul_if=eth0        # upload interface
+#ul_if=eth5       # upload interface
 
 # tsping - round robin pinging using ICMP type 13 (owds)
 pinger_binary=tsping
@@ -61,13 +68,15 @@ no_pingers=7 # number of pingers to maintain
 adjust_dl_shaper_rate=1 # enable (1) or disable (0) actually changing the dl shaper rate
 adjust_ul_shaper_rate=1 # enable (1) or disable (0) actually changing the ul shaper rate
 
-min_dl_shaper_rate_kbps=18000  # minimum bandwidth for download (Kbit/s)
+min_dl_shaper_rate_kbps=5000  # minimum bandwidth for download (Kbit/s)
 base_dl_shaper_rate_kbps=85000 # steady state bandwidth for download (Kbit/s)
 max_dl_shaper_rate_kbps=190000  # maximum bandwidth for download (Kbit/s)
 
-min_ul_shaper_rate_kbps=7500  # minimum bandwidth for upload (Kbit/s)
+min_ul_shaper_rate_kbps=5000  # minimum bandwidth for upload (Kbit/s)
 base_ul_shaper_rate_kbps=20000 # steady state bandwidth for upload (KBit/s)
 max_ul_shaper_rate_kbps=50000  # maximum bandwidth for upload (Kbit/s)
+
+connection_active_thr_kbps=2000  # threshold in Kbit/s below which dl/ul is considered idle
 
 # *** OVERRIDES ***
 
