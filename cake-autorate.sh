@@ -163,7 +163,7 @@ print_headers()
 {
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
-	header="DATA_HEADER; LOG_DATETIME; LOG_TIMESTAMP; PROC_TIME_US; DL_ACHIEVED_RATE_KBPS; UL_ACHIEVED_RATE_KBPS; DL_LOAD_PERCENT; UL_LOAD_PERCENT; ICMP_TIMESTAMP; REFLECTOR; SEQUENCE; DL_OWD_BASELINE; DL_OWD_US; DL_OWD_DELTA_EWMA_US; DL_OWD_DELTA_US; DL_ADJ_DELAY_THR; UL_OWD_BASELINE; UL_OWD_US; UL_OWD_DELTA_EWMA_US; UL_OWD_DELTA_US; UL_ADJ_DELAY_THR; DL_SUM_DELAYS; DL_AVG_OWD_DELTA_US; DL_ADJ_AVG_OWD_DELTA_THR_US; UL_SUM_DELAYS; UL_AVG_OWD_DELTA_US; UL_ADJ_AVG_OWD_DELTA_THR_US; DL_LOAD_CONDITION; UL_LOAD_CONDITION; CAKE_DL_RATE_KBPS; CAKE_UL_RATE_KBPS"
+	header="DATA_HEADER; LOG_DATETIME; LOG_TIMESTAMP; PROC_TIME_US; DL_ACHIEVED_RATE_KBPS; UL_ACHIEVED_RATE_KBPS; DL_LOAD_PERCENT; UL_LOAD_PERCENT; ICMP_TIMESTAMP; REFLECTOR; SEQUENCE; DL_OWD_BASELINE; DL_OWD_US; DL_OWD_DELTA_EWMA_US; DL_OWD_DELTA_US; DL_ADJ_DELAY_THR; UL_OWD_BASELINE; UL_OWD_US; UL_OWD_DELTA_EWMA_US; UL_OWD_DELTA_US; UL_ADJ_DELAY_THR; DL_SUM_DELAYS; DL_AVG_OWD_DELTA_US; DL_ADJ_AVG_OWD_DELTA_THR_US; UL_SUM_DELAYS; UL_AVG_OWD_DELTA_US; UL_ADJ_AVG_OWD_DELTA_THR_US; DL_LOAD_CONDITION; UL_LOAD_CONDITION; CAKE_DL_RATE_KBPS; CAKE_UL_RATE_KBPS; CLOCK_ADJ_US"
 	((log_to_file)) && printf '%s\n' "${header}" >> "${log_file_path}"
 	((terminal)) && printf '%s\n' "${header}"
 
@@ -212,7 +212,7 @@ reset_log_file()
 generate_log_file_scripts()
 {
 	cat > "${run_path}/log_file_export" <<- EOT
-	#!/usr/bin/env bash
+	#!${BASH}
 
 	timeout_s=\${1:-20}
 
@@ -246,7 +246,7 @@ generate_log_file_scripts()
 	EOT
 
 	cat > "${run_path}/log_file_reset" <<- EOT
-	#!/usr/bin/env bash
+	#!${BASH}
 
 	if kill -USR2 "${proc_pids['maintain_log_file']}"
 	then
@@ -587,6 +587,7 @@ parse_tsping()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
 	declare -A dl_owd_delta_ewmas_us
@@ -594,6 +595,7 @@ parse_tsping()
 
 	for (( reflector=0; reflector<no_pingers; reflector++ ))
 	do
+		clock_adj_us["${reflectors[reflector]}"]=0
 		dl_owd_baselines_us["${reflectors[reflector]}"]=100000
 		ul_owd_baselines_us["${reflectors[reflector]}"]=100000
 		dl_owd_delta_ewmas_us["${reflectors[reflector]}"]=0
@@ -641,6 +643,7 @@ parse_tsping()
 				log_msg "DEBUG" "Read in new reflectors: ${reflectors[*]}"
 				for (( reflector=0; reflector<no_pingers; reflector++ ))
 				do
+					clock_adj_us["${reflectors[reflector]}"]="${clock_adj_us[${reflectors[reflector]}]:-0}"
 					dl_owd_baselines_us["${reflectors[reflector]}"]="${dl_owd_baselines_us[${reflectors[reflector]}]:-100000}"
 					ul_owd_baselines_us["${reflectors[reflector]}"]="${ul_owd_baselines_us[${reflectors[reflector]}]:-100000}"
 					dl_owd_delta_ewmas_us["${reflectors[reflector]}"]="${dl_owd_delta_ewmas_us[${reflectors[reflector]}]:-0}"
@@ -681,8 +684,12 @@ parse_tsping()
 		[[ "${timestamp:-}" && "${reflector:-}" && "${seq:-}" && "${dl_owd_ms:-}" && "${ul_owd_ms:-}" && "${checksum:-}" ]] || continue
 		[[ "${checksum}" == "${timestamp}" ]] || continue
 
-		dl_owd_us="${dl_owd_ms}000"
-		ul_owd_us="${ul_owd_ms}000"
+		new_drift_us=$(( dl_owd_ms/2 - ul_owd_ms/2 ))000
+		new_drift_us=$(( dl_owd_ms + ul_owd_ms > 25 ? clock_adj_us[${reflector}] : new_drift_us ))
+		clock_adj_us[${reflector}]=$(( clock_alpha*new_drift_us/1000+(1000-clock_alpha)*clock_adj_us[${reflector}]/1000 ))
+
+		dl_owd_us=$(( "${dl_owd_ms}000"-clock_adj_us[${reflector}] ))
+		ul_owd_us=$(( "${ul_owd_ms}000"+clock_adj_us[${reflector}] ))
 
 		dl_owd_delta_us=$(( dl_owd_us - dl_owd_baselines_us[${reflector}] ))
 		ul_owd_delta_us=$(( ul_owd_us - ul_owd_baselines_us[${reflector}] ))
@@ -729,9 +736,11 @@ parse_tsping()
 			ewma_iteration "${ul_owd_delta_us}" "${alpha_delta_ewma}" "ul_owd_delta_ewmas_us[${reflector}]"
 		fi
 
-		printf "REFLECTOR_RESPONSE %s %s %s %s %s %s %s %s %s %s %s\n" "${timestamp}" "${reflector}" "${seq}" "${dl_owd_baselines_us[${reflector}]}" "${dl_owd_us}" "${dl_owd_delta_ewmas_us[${reflector}]}" "${dl_owd_delta_us}" "${ul_owd_baselines_us[${reflector}]}" "${ul_owd_us}" "${ul_owd_delta_ewmas_us[${reflector}]}" "${ul_owd_delta_us}" >&"${main_fd}"
+		printf "REFLECTOR_RESPONSE %s %s %s %s %s %s %s %s %s %s %s %s\n" "${timestamp}" "${clock_adj_us[${reflector}]}" "${reflector}" "${seq}" "${dl_owd_baselines_us[${reflector}]}" "${dl_owd_us}" "${dl_owd_delta_ewmas_us[${reflector}]}" "${dl_owd_delta_us}" "${ul_owd_baselines_us[${reflector}]}" "${ul_owd_us}" "${ul_owd_delta_ewmas_us[${reflector}]}" "${ul_owd_delta_us}" >&"${main_fd}"
 
 		timestamp_us="${timestamp//[.]}"
+
+		printf "SET_ARRAY_ELEMENT clock_adj_us %s %s\n" "${reflector}" "${clock_adj_us[${reflector}]}" >&"${maintain_pingers_fd}"
 
 		printf "SET_ARRAY_ELEMENT dl_owd_baselines_us %s %s\n" "${reflector}" "${dl_owd_baselines_us[${reflector}]}" >&"${maintain_pingers_fd}"
 		printf "SET_ARRAY_ELEMENT ul_owd_baselines_us %s %s\n" "${reflector}" "${ul_owd_baselines_us[${reflector}]}" >&"${maintain_pingers_fd}"
@@ -754,6 +763,7 @@ parse_fping()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
 	declare -A dl_owd_delta_ewmas_us
@@ -761,6 +771,7 @@ parse_fping()
 
 	for (( reflector=0; reflector<no_pingers; reflector++ ))
 	do
+		clock_adj_us["${reflectors[reflector]}"]=0
 		dl_owd_baselines_us["${reflectors[reflector]}"]=100000
 		ul_owd_baselines_us["${reflectors[reflector]}"]=100000
 		dl_owd_delta_ewmas_us["${reflectors[reflector]}"]=0
@@ -810,6 +821,7 @@ parse_fping()
 				log_msg "DEBUG" "Read in new reflectors: ${reflectors[*]}"
 				for (( reflector=0; reflector<no_pingers; reflector++ ))
 				do
+					clock_adj_us["${reflectors[reflector]}"]="${clock_adj_us[${reflectors[reflector]}]:-0}"
 					dl_owd_baselines_us["${reflectors[reflector]}"]="${dl_owd_baselines_us[${reflectors[reflector]}]:-100000}"
 					ul_owd_baselines_us["${reflectors[reflector]}"]="${ul_owd_baselines_us[${reflectors[reflector]}]:-100000}"
 					dl_owd_delta_ewmas_us["${reflectors[reflector]}"]="${dl_owd_delta_ewmas_us[${reflectors[reflector]}]:-0}"
@@ -873,9 +885,11 @@ parse_fping()
 
 		timestamp="${timestamp//[\[\]]}0"
 
-		printf "REFLECTOR_RESPONSE %s %s %s %s %s %s %s %s %s %s %s\n" "${timestamp}" "${reflector}" "${seq}" "${dl_owd_baselines_us[${reflector}]}" "${dl_owd_us}" "${dl_owd_delta_ewmas_us[${reflector}]}" "${dl_owd_delta_us}" "${ul_owd_baselines_us[${reflector}]}" "${ul_owd_us}" "${ul_owd_delta_ewmas_us[${reflector}]}" "${ul_owd_delta_us}" >&"${main_fd}"
+		printf "REFLECTOR_RESPONSE %s %s %s %s %s %s %s %s %s %s %s %s\n" "${timestamp}" "${clock_adj_us[${reflector}]}" "${reflector}" "${seq}" "${dl_owd_baselines_us[${reflector}]}" "${dl_owd_us}" "${dl_owd_delta_ewmas_us[${reflector}]}" "${dl_owd_delta_us}" "${ul_owd_baselines_us[${reflector}]}" "${ul_owd_us}" "${ul_owd_delta_ewmas_us[${reflector}]}" "${ul_owd_delta_us}" >&"${main_fd}"
 
 		timestamp_us="${timestamp//[.]}"
+
+		printf "SET_ARRAY_ELEMENT clock_adj_us %s %s\n" "${reflector}" "${clock_adj_us[${reflector}]}" >&"${maintain_pingers_fd}"
 
 		printf "SET_ARRAY_ELEMENT dl_owd_baselines_us %s %s\n" "${reflector}" "${dl_owd_baselines_us[${reflector}]}" >&"${maintain_pingers_fd}"
 		printf "SET_ARRAY_ELEMENT ul_owd_baselines_us %s %s\n" "${reflector}" "${ul_owd_baselines_us[${reflector}]}" >&"${maintain_pingers_fd}"
@@ -900,11 +914,13 @@ parse_ping()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
 	declare -A dl_owd_delta_ewmas_us
 	declare -A ul_owd_delta_ewmas_us
 
+	clock_adj_us["${reflector}"]=0
 	dl_owd_baselines_us["${reflector}"]=100000
 	ul_owd_baselines_us["${reflector}"]=100000
 	dl_owd_delta_ewmas_us["${reflector}"]=0
@@ -951,6 +967,7 @@ parse_ping()
 				then
 					reflector="${command[1]}"
 					log_msg "DEBUG" "Read in new reflector: ${reflector}"
+					clock_adj_us["${reflector}"]="${dl_owd_baselines_us[${reflector}]:-0}"
 					dl_owd_baselines_us["${reflector}"]="${dl_owd_baselines_us[${reflector}]:-100000}"
 					ul_owd_baselines_us["${reflector}"]="${ul_owd_baselines_us[${reflector}]:-100000}"
 					dl_owd_delta_ewmas_us["${reflector}"]="${dl_owd_delta_ewmas_us[${reflector}]:-0}"
@@ -998,7 +1015,7 @@ parse_ping()
 		seq="${seq//icmp_seq=}"
 		rtt_ms="${rtt_ms//time=}"
 
-		printf -v rtt_us %.3f "$rtt_ms"
+		printf -v rtt_us %.3f "${rtt_ms}"
 		rtt_us="${rtt_us//.}"
 
 		dl_owd_us=$((rtt_us/2))
@@ -1020,9 +1037,11 @@ parse_ping()
 
 		timestamp="${timestamp//[\[\]]}"
 
-		printf "REFLECTOR_RESPONSE %s %s %s %s %s %s %s %s %s %s %s\n" "${timestamp}" "${reflector}" "${seq}" "${dl_owd_baselines_us[${reflector}]}" "${dl_owd_us}" "${dl_owd_delta_ewmas_us[${reflector}]}" "${dl_owd_delta_us}" "${ul_owd_baselines_us[${reflector}]}" "${ul_owd_us}" "${ul_owd_delta_ewmas_us[${reflector}]}" "${ul_owd_delta_us}" >&"${main_fd}"
+		printf "REFLECTOR_RESPONSE %s %s %s %s %s %s %s %s %s %s %s %s\n" "${timestamp}" "${clock_adj_us[${reflector}]}" "${reflector}" "${seq}" "${dl_owd_baselines_us[${reflector}]}" "${dl_owd_us}" "${dl_owd_delta_ewmas_us[${reflector}]}" "${dl_owd_delta_us}" "${ul_owd_baselines_us[${reflector}]}" "${ul_owd_us}" "${ul_owd_delta_ewmas_us[${reflector}]}" "${ul_owd_delta_us}" >&"${main_fd}"
 
 		timestamp_us="${timestamp//[.]}"
+
+		printf "SET_ARRAY_ELEMENT clock_adj_us %s %s\n" "${reflector}" "${clock_adj_us[${reflector}]}" >&"${maintain_pingers_fd}"
 
 		printf "SET_ARRAY_ELEMENT dl_owd_baselines_us %s %s\n" "${reflector}" "${dl_owd_baselines_us[${reflector}]}" >&"${maintain_pingers_fd}"
 		printf "SET_ARRAY_ELEMENT ul_owd_baselines_us %s %s\n" "${reflector}" "${ul_owd_baselines_us[${reflector}]}" >&"${maintain_pingers_fd}"
@@ -1258,6 +1277,7 @@ maintain_pingers()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
 	declare -A dl_owd_delta_ewmas_us
@@ -1427,7 +1447,7 @@ maintain_pingers()
 
 						if ((output_reflector_stats))
 						then
-							printf -v reflector_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${EPOCHREALTIME}" "${reflectors[pinger]}" "${min_sum_owd_baselines_us}" "${sum_owd_baselines_us[pinger]}" "${sum_owd_baselines_delta_us}" "${reflector_sum_owd_baselines_delta_thr_us}" "${min_dl_owd_delta_ewma_us}" "${dl_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${dl_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${min_ul_owd_delta_ewma_us}" "${ul_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${ul_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}"
+							printf -v reflector_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${EPOCHREALTIME}" "${reflectors[pinger]}" "${min_sum_owd_baselines_us}" "${sum_owd_baselines_us[pinger]}" "${sum_owd_baselines_delta_us}" "${reflector_sum_owd_baselines_delta_thr_us}" "${min_dl_owd_delta_ewma_us}" "${dl_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${dl_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${min_ul_owd_delta_ewma_us}" "${ul_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${ul_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${clock_adj_us[${reflectors[pinger]}]}"
 							log_msg "REFLECTOR" "${reflector_stats}"
 						fi
 	
@@ -2121,7 +2141,7 @@ do
 
 		REFLECTOR_RESPONSE)
 
-			read -r timestamp reflector seq dl_owd_baseline_us dl_owd_us dl_owd_delta_ewma_us dl_owd_delta_us ul_owd_baseline_us ul_owd_us ul_owd_delta_ewma_us ul_owd_delta_us <<< "${command[@]:1}"
+			read -r timestamp clock_adj_us reflector seq dl_owd_baseline_us dl_owd_us dl_owd_delta_ewma_us dl_owd_delta_us ul_owd_baseline_us ul_owd_us ul_owd_delta_ewma_us ul_owd_delta_us <<< "${command[@]:1}"
 			;;
 
 		SET_VAR)
@@ -2211,13 +2231,13 @@ do
 
 				if (( output_processing_stats ))
 				then
-					printf -v processing_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${EPOCHREALTIME}" "${achieved_rate_kbps[dl]}" "${achieved_rate_kbps[ul]}" "${load_percent[dl]}" "${load_percent[ul]}" "${timestamp}" "${reflector}" "${seq}" "${dl_owd_baseline_us}" "${dl_owd_us}" "${dl_owd_delta_ewma_us}" "${dl_owd_delta_us}" "${compensated_owd_delta_thr_us[dl]}" "${ul_owd_baseline_us}" "${ul_owd_us}" "${ul_owd_delta_ewma_us}" "${ul_owd_delta_us}" "${compensated_owd_delta_thr_us[ul]}" "${sum_dl_delays}" "${avg_owd_delta_us[dl]}" "${compensated_avg_owd_delta_thr_us[dl]}" "${sum_ul_delays}" "${avg_owd_delta_us[ul]}" "${compensated_avg_owd_delta_thr_us[ul]}" "${load_condition[dl]}" "${load_condition[ul]}" "${shaper_rate_kbps[dl]}" "${shaper_rate_kbps[ul]}"
+					printf -v processing_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${EPOCHREALTIME}" "${achieved_rate_kbps[dl]}" "${achieved_rate_kbps[ul]}" "${load_percent[dl]}" "${load_percent[ul]}" "${timestamp}" "${reflector}" "${seq}" "${dl_owd_baseline_us}" "${dl_owd_us}" "${dl_owd_delta_ewma_us}" "${dl_owd_delta_us}" "${compensated_owd_delta_thr_us[dl]}" "${ul_owd_baseline_us}" "${ul_owd_us}" "${ul_owd_delta_ewma_us}" "${ul_owd_delta_us}" "${compensated_owd_delta_thr_us[ul]}" "${sum_dl_delays}" "${avg_owd_delta_us[dl]}" "${compensated_avg_owd_delta_thr_us[dl]}" "${sum_ul_delays}" "${avg_owd_delta_us[ul]}" "${compensated_avg_owd_delta_thr_us[ul]}" "${load_condition[dl]}" "${load_condition[ul]}" "${shaper_rate_kbps[dl]}" "${shaper_rate_kbps[ul]}" "${clock_adj_us}"
 					log_msg "DATA" "${processing_stats}"
 				fi
 
 				if (( output_summary_stats ))
 				then
-					printf -v summary_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${achieved_rate_kbps[dl]}" "${achieved_rate_kbps[ul]}" "${sum_dl_delays}" "${sum_ul_delays}" "${avg_owd_delta_us[dl]}" "${avg_owd_delta_us[ul]}" "${load_condition[dl]}" "${load_condition[ul]}" "${shaper_rate_kbps[dl]}" "${shaper_rate_kbps[ul]}"
+					printf -v summary_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${achieved_rate_kbps[dl]}" "${achieved_rate_kbps[ul]}" "${sum_dl_delays}" "${sum_ul_delays}" "${avg_owd_delta_us[dl]}" "${avg_owd_delta_us[ul]}" "${load_condition[dl]}" "${load_condition[ul]}" "${shaper_rate_kbps[dl]}" "${shaper_rate_kbps[ul]}" "${clock_adj_us}"
 					log_msg "SUMMARY" "${summary_stats}"
 				fi
 

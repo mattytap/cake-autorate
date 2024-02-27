@@ -74,6 +74,7 @@ randomize_reflectors=1 # enable (1) or disable (0) randomization of reflectors o
 # and to avoid abusive network activity (excessive ICMP frequency to one reflector)
 # The author has found an ICMP rate of 1/(0.2/4) = 20 Hz to give satisfactory performance on 4G
 no_pingers=6 # number of pingers to maintain
+no_used_reflectors=6
 reflector_ping_interval_s=0.3 # (seconds, e.g. 0.2s or 2s)
 
 # owd delta threshold in ms is the extent of OWD increase to classify as a delay
@@ -216,3 +217,6 @@ sss_compensation=0 # enable (1) or disable (0) Starlink handling
 sss_times_s=("12.0" "27.0" "42.0" "57.0")
 sss_compensation_pre_duration_ms=300
 sss_compensation_post_duration_ms=200
+
+# Initialize clock drift adjustment (in microseconds)
+clock_alpha=0 # EWMA smoothing factor out of 1000
