@@ -587,6 +587,8 @@ parse_tsping()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A min_dl_ms
+	declare -A min_ul_ms
 	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
@@ -595,6 +597,8 @@ parse_tsping()
 
 	for (( reflector=0; reflector<no_pingers; reflector++ ))
 	do
+		min_dl_ms["${reflectors[reflector]}"]=10
+		min_ul_ms["${reflectors[reflector]}"]=10
 		clock_adj_us["${reflectors[reflector]}"]=0
 		dl_owd_baselines_us["${reflectors[reflector]}"]=100000
 		ul_owd_baselines_us["${reflectors[reflector]}"]=100000
@@ -643,6 +647,8 @@ parse_tsping()
 				log_msg "DEBUG" "Read in new reflectors: ${reflectors[*]}"
 				for (( reflector=0; reflector<no_pingers; reflector++ ))
 				do
+					min_dl_ms["${reflectors[reflector]}"]="${min_dl_ms[${reflectors[reflector]}]:-10}"
+					min_ul_ms["${reflectors[reflector]}"]="${min_ul_ms[${reflectors[reflector]}]:-10}"
 					clock_adj_us["${reflectors[reflector]}"]="${clock_adj_us[${reflectors[reflector]}]:-0}"
 					dl_owd_baselines_us["${reflectors[reflector]}"]="${dl_owd_baselines_us[${reflectors[reflector]}]:-100000}"
 					ul_owd_baselines_us["${reflectors[reflector]}"]="${ul_owd_baselines_us[${reflectors[reflector]}]:-100000}"
@@ -684,8 +690,18 @@ parse_tsping()
 		[[ "${timestamp:-}" && "${reflector:-}" && "${seq:-}" && "${dl_owd_ms:-}" && "${ul_owd_ms:-}" && "${checksum:-}" ]] || continue
 		[[ "${checksum}" == "${timestamp}" ]] || continue
 
-		new_drift_us=$(( dl_owd_ms/2 - ul_owd_ms/2 ))000
-		new_drift_us=$(( dl_owd_ms + ul_owd_ms > 25 ? clock_adj_us[${reflector}] : new_drift_us ))
+		# Calculate new values for min_dl_ms and min_ul_ms
+		min_dl_ms[${reflector}]=$(( dl_owd_ms < min_dl_ms[${reflector}] ? dl_owd_ms : min_dl_ms[${reflector}] ))
+		min_ul_ms[${reflector}]=$(( ul_owd_ms < min_ul_ms[${reflector}] ? ul_owd_ms : min_ul_ms[${reflector}] ))
+		
+		# Check if the sum of new values is less than 19
+		sum=$(( min_dl_ms[${reflector}] + min_ul_ms[${reflector}] ))
+		if (( sum < 19 )); then
+		    # Increment both variables so sum is either 19 or 20
+		    min_dl_ms[${reflector}]=$(( min_dl_ms[${reflector}] + 10 - sum/2 ))
+		    min_ul_ms[${reflector}]=$(( min_ul_ms[${reflector}] + 10 - sum/2 ))
+		fi
+		new_drift_us=$(( min_dl_ms[${reflector}]/2 - min_ul_ms[${reflector}]/2 ))000
 		clock_adj_us[${reflector}]=$(( clock_alpha*new_drift_us/1000+(1000-clock_alpha)*clock_adj_us[${reflector}]/1000 ))
 
 		dl_owd_us=$(( "${dl_owd_ms}000"-clock_adj_us[${reflector}] ))
@@ -759,10 +775,12 @@ parse_fping()
 
 	local parse_id="${1}"
 
-	local reflectors=("${@:2}")
+		local reflectors=("${@:2}")
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A min_dl_ms
+	declare -A min_ul_ms
 	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
@@ -771,6 +789,8 @@ parse_fping()
 
 	for (( reflector=0; reflector<no_pingers; reflector++ ))
 	do
+		min_dl_ms["${reflectors[reflector]}"]=10
+		min_ul_ms["${reflectors[reflector]}"]=10
 		clock_adj_us["${reflectors[reflector]}"]=0
 		dl_owd_baselines_us["${reflectors[reflector]}"]=100000
 		ul_owd_baselines_us["${reflectors[reflector]}"]=100000
@@ -821,6 +841,8 @@ parse_fping()
 				log_msg "DEBUG" "Read in new reflectors: ${reflectors[*]}"
 				for (( reflector=0; reflector<no_pingers; reflector++ ))
 				do
+					min_dl_ms["${reflectors[reflector]}"]="${min_dl_ms[${reflectors[reflector]}]:-10}"
+					min_ul_ms["${reflectors[reflector]}"]="${min_ul_ms[${reflectors[reflector]}]:-10}"
 					clock_adj_us["${reflectors[reflector]}"]="${clock_adj_us[${reflectors[reflector]}]:-0}"
 					dl_owd_baselines_us["${reflectors[reflector]}"]="${dl_owd_baselines_us[${reflectors[reflector]}]:-100000}"
 					ul_owd_baselines_us["${reflectors[reflector]}"]="${ul_owd_baselines_us[${reflectors[reflector]}]:-100000}"
@@ -914,12 +936,16 @@ parse_ping()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A min_dl_ms
+	declare -A min_ul_ms
 	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
 	declare -A dl_owd_delta_ewmas_us
 	declare -A ul_owd_delta_ewmas_us
 
+	min_dl_ms["${reflectors[reflector]}"]=10
+	min_ul_ms["${reflectors[reflector]}"]=10
 	clock_adj_us["${reflector}"]=0
 	dl_owd_baselines_us["${reflector}"]=100000
 	ul_owd_baselines_us["${reflector}"]=100000
@@ -967,7 +993,9 @@ parse_ping()
 				then
 					reflector="${command[1]}"
 					log_msg "DEBUG" "Read in new reflector: ${reflector}"
-					clock_adj_us["${reflector}"]="${dl_owd_baselines_us[${reflector}]:-0}"
+					min_dl_ms["${reflectors[reflector]}"]="${min_dl_ms[${reflectors[reflector]}]:-10}"
+					min_ul_ms["${reflectors[reflector]}"]="${min_ul_ms[${reflectors[reflector]}]:-10}"
+					clock_adj_us["${reflector}"]="${clock_adj_us[${reflector}]:-0}"
 					dl_owd_baselines_us["${reflector}"]="${dl_owd_baselines_us[${reflector}]:-100000}"
 					ul_owd_baselines_us["${reflector}"]="${ul_owd_baselines_us[${reflector}]:-100000}"
 					dl_owd_delta_ewmas_us["${reflector}"]="${dl_owd_delta_ewmas_us[${reflector}]:-0}"
@@ -1277,6 +1305,8 @@ maintain_pingers()
 
 	log_msg "DEBUG" "Starting: ${FUNCNAME[0]} with PID: ${BASHPID}"
 
+	declare -A min_dl_ms
+	declare -A min_ul_ms
 	declare -A clock_adj_us
 	declare -A dl_owd_baselines_us
 	declare -A ul_owd_baselines_us
@@ -1438,6 +1468,8 @@ maintain_pingers()
 						(( ul_owd_delta_ewmas_us[${reflectors[pinger]}] < min_ul_owd_delta_ewma_us )) && min_ul_owd_delta_ewma_us="${ul_owd_delta_ewmas_us[${reflectors[pinger]}]}"
 					done
 
+					printf '%s\n' "REFLECTOR;                                                                              MIN   BASE    DELTA DELTA_THR;  MIN   BASE    DELTA DELTA_THR;  MIN   BASE    DELTA DELTA_THR; CLOCK"
+					printf '%s\n' "REFLECTOR;                                                                                  SUM_OWD_BASELINES_US     ;        DL_DELTA_EWMA_US       ;        UL_DELTA_EWMA_US       ; ADJ_US"
 					for ((pinger=0; pinger < no_pingers; pinger++))
 					do
 
@@ -1447,7 +1479,7 @@ maintain_pingers()
 
 						if ((output_reflector_stats))
 						then
-							printf -v reflector_stats '%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s' "${EPOCHREALTIME}" "${reflectors[pinger]}" "${min_sum_owd_baselines_us}" "${sum_owd_baselines_us[pinger]}" "${sum_owd_baselines_delta_us}" "${reflector_sum_owd_baselines_delta_thr_us}" "${min_dl_owd_delta_ewma_us}" "${dl_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${dl_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${min_ul_owd_delta_ewma_us}" "${ul_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${ul_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${clock_adj_us[${reflectors[pinger]}]}"
+							printf -v reflector_stats '%s; %s; \t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s;\t%s' "${EPOCHREALTIME}" "${reflectors[pinger]}" "${min_sum_owd_baselines_us}" "${sum_owd_baselines_us[pinger]}" "${sum_owd_baselines_delta_us}" "${reflector_sum_owd_baselines_delta_thr_us}" "${min_dl_owd_delta_ewma_us}" "${dl_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${dl_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${min_ul_owd_delta_ewma_us}" "${ul_owd_delta_ewmas_us[${reflectors[pinger]}]}" "${ul_owd_delta_ewma_delta_us}" "${reflector_owd_delta_ewma_delta_thr_us}" "${clock_adj_us[${reflectors[pinger]}]}"
 							log_msg "REFLECTOR" "${reflector_stats}"
 						fi
 	
@@ -1472,6 +1504,7 @@ maintain_pingers()
 							continue 2
 						fi
 					done
+					printf '\n'
 
 				fi
 
@@ -2177,7 +2210,7 @@ do
 
 			if [[ "${command[0]}" == "REFLECTOR_RESPONSE" && "${timestamp-}" && "${reflector-}" && "${seq-}" && "${dl_owd_baseline_us-}" && "${dl_owd_us-}" && "${dl_owd_delta_ewma_us-}" && "${dl_owd_delta_us-}" && "${ul_owd_baseline_us-}" && "${ul_owd_us-}" && "${ul_owd_delta_ewma_us-}" && "${ul_owd_delta_us-}" ]]
 			then
-				
+		
 				t_start_us=${EPOCHREALTIME/./}
 
 				reflectors_last_timestamp_us="${timestamp//[.]}"
